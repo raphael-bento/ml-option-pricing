@@ -39,18 +39,27 @@ def make_grid(
 
 
 def edge_masks(X: np.ndarray, fraction: float = EDGE_FRACTION) -> dict[str, np.ndarray]:
-    """Boolean masks for each of the four edges plus the ``core`` (outside every edge band)."""
+    """Boolean masks for each of the four edges plus the ``core`` (outside every edge band).
+
+    Corner points belong to two edge bands at once (e.g. m_low and tau_low), so they are counted
+    in both bands; they are never in the core.
+    """
     masks = {}
     for col, name in ((0, "m"), (1, "tau")):
         lo, hi = BOUNDS[name]
         w = fraction * (hi - lo)
         masks[f"{name}_low"] = X[:, col] < lo + w
         masks[f"{name}_high"] = X[:, col] > hi - w
-    # Corners belong to two edge bands at once (e.g. m_low and tau_low).
     masks["core"] = ~np.any([masks[e] for e in EDGES], axis=0)
     if not masks["core"].any() or not all(masks[e].any() for e in EDGES):
         raise ValueError("grid too coarse: an edge band or the core is empty")
     return masks
+
+
+def _nanmean(v: np.ndarray) -> float:
+    """Mean ignoring NaN; NaN (no warning) if no valid point (e.g. relerr, price < 0.01)."""
+    v = v[~np.isnan(v)]
+    return float(v.mean()) if v.size else float("nan")
 
 
 def edge_stats(
@@ -72,9 +81,10 @@ def edge_stats(
         rho = float(spearmanr(std, err).statistic)
     out = {"spearman": rho}
     for key, v in fields.items():
-        out[f"{key}_core"] = float(np.nanmean(v[core]))
+        core_mean = _nanmean(v[core])
+        out[f"{key}_core"] = core_mean
         for e in EDGES:
-            out[f"{key}_ratio_{e}"] = float(np.nanmean(v[masks[e]]) / np.nanmean(v[core]))
+            out[f"{key}_ratio_{e}"] = _nanmean(v[masks[e]]) / core_mean
     return out
 
 
@@ -97,10 +107,17 @@ def plot_maps(
     plt.close(fig)
 
 
+def _fmt(mean: float, std: float, spec: str) -> str:
+    """``mean ± std`` or ``n/a`` when undefined."""
+    return "n/a" if np.isnan(mean) else f"{mean:{spec}} ± {std:{spec}}"
+
+
 def stats_markdown(stats: dict[str, dict[str, tuple[float, float]]]) -> str:
     """Markdown table of mean ± std (over seeds) of the edge / core ratios per method.
 
-    1.00 is the no-edge-effect reference. ``relerr`` is error / true price (price >= REL_MIN_PRICE).
+    1.00 is the no-edge-effect reference. ``relerr`` is error / true price (price >= REL_MIN_PRICE);
+    a band with no such point (typically ``m_low`` at sigma=0.3: deep OTM, price < 0.01) is
+    undefined and shown as "n/a".
     """
     lines = [
         "| method | metric | " + " | ".join(EDGES) + " | Spearman(std, err) |",
@@ -108,10 +125,8 @@ def stats_markdown(stats: dict[str, dict[str, tuple[float, float]]]) -> str:
     ]
     for name, s in stats.items():
         for k in KEYS:
-            cells = " | ".join(
-                f"{s[f'{k}_ratio_{e}'][0]:.2f} ± {s[f'{k}_ratio_{e}'][1]:.2f}" for e in EDGES
-            )
-            rho = f"{s['spearman'][0]:.3f} ± {s['spearman'][1]:.3f}" if k == "std" else ""
+            cells = " | ".join(_fmt(*s[f"{k}_ratio_{e}"], ".2f") for e in EDGES)
+            rho = _fmt(*s["spearman"], ".3f") if k == "std" else ""
             lines.append(f"| {name} | {k} ratio | {cells} | {rho} |")
     return "\n".join(lines) + "\n"
 

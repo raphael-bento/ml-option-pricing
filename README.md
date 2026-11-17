@@ -82,7 +82,21 @@ Reported as edge/interior ratios (1.00 = no edge effect) per border (`m_low`, `m
 `tau_low`, `tau_high`) for the std, the absolute error and the relative error, as
 mean ± std over 3 seeds (42, 142, 242), plus Spearman(std, err). Generate the exact table with
 `python -m option_pricing.uncertainty_maps`; it is written to `outputs/` (git-ignored).
-The numeric table previously shown here could not be traced to the output of this script and was removed.
+
+| method | metric | m_low | m_high | tau_low | tau_high | Spearman(std, err) |
+|---|---|---|---|---|---|---|
+| deep ensemble (N=5) | std ratio | 0.83 ± 0.16 | 1.54 ± 0.22 | 1.25 ± 0.09 | 1.09 ± 0.11 | 0.063 ± 0.217 |
+| deep ensemble (N=5) | err ratio | 0.70 ± 0.10 | 2.73 ± 0.57 | 1.46 ± 0.21 | 0.97 ± 0.26 |  |
+| deep ensemble (N=5) | relerr ratio | n/a | 0.36 ± 0.08 | 0.99 ± 0.26 | 1.13 ± 0.16 |  |
+| MC dropout (T=100) | std ratio | 0.82 ± 0.44 | 2.34 ± 0.12 | 1.07 ± 0.01 | 1.16 ± 0.08 | 0.413 ± 0.153 |
+| MC dropout (T=100) | err ratio | 0.44 ± 0.24 | 1.65 ± 0.30 | 0.96 ± 0.17 | 1.36 ± 0.37 |  |
+| MC dropout (T=100) | relerr ratio | n/a | 0.30 ± 0.07 | 1.30 ± 0.44 | 1.22 ± 0.45 |  |
+
+`n/a` for `relerr` at `m_low`: with σ=0.3, r=0.06 the true price is below 0.01 (K = 1) for
+m ≤ 0.46 (≈ 0.0002 at m=0.4, ≈ 0.0008 at m=0.46, both at the most favourable τ=1.1; this holds
+for σ=0.3, r=0.06 only), so no point of that band has a defined relative error
+(relative error is only computed where price ≥ 0.01, to avoid dividing by ~0). Absolute-error
+and std ratios are unaffected.
 
 Note: the MC dropout map uses **member 0 of the ensemble** (same network), so the
 ensemble vs MC dropout contrast should be read with that caveat.

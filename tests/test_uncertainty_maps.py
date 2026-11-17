@@ -68,8 +68,6 @@ def test_cli_writes_figures_and_markdown(tmp_path):
 
 
 def test_run_rejects_zero_seeds():
-    import pytest
-
     from option_pricing.uncertainty_maps import run
 
     with pytest.raises(ValueError):
@@ -77,10 +75,6 @@ def test_run_rejects_zero_seeds():
 
 
 def test_relerr_ignores_near_zero_prices():
-    import numpy as np
-
-    from option_pricing.uncertainty_maps import edge_stats, make_grid
-
     _, _, X = make_grid(n_m=20, n_tau=20)
     truth = np.ones(len(X))
     truth[X[:, 0] < 0.6] = 0.0  # price ~0 on the low-m side: relerr must stay finite
@@ -88,3 +82,21 @@ def test_relerr_ignores_near_zero_prices():
     s = edge_stats(X, err, err, truth)
     assert np.isfinite(s["relerr_core"])
     assert abs(s["relerr_core"] - 0.01) < 1e-12
+
+
+def test_relerr_nan_without_warning_when_band_has_no_valid_price(recwarn):
+    _, _, X = make_grid(n_m=20, n_tau=20)
+    truth = np.where(X[:, 0] < 0.6, 0.0, 1.0)  # m_low band entirely below REL_MIN_PRICE
+    err = np.full(len(X), 0.01)
+    s = edge_stats(X, err, err, truth)
+    assert math.isnan(s["relerr_ratio_m_low"])
+    assert np.isfinite(s["relerr_ratio_m_high"])
+    assert not [w for w in recwarn if issubclass(w.category, RuntimeWarning)]
+
+
+def test_stats_markdown_shows_na_for_undefined_ratio():
+    keys = [f"{k}_ratio_{e}" for k in ("std", "err", "relerr") for e in EDGES]
+    stats = {"m": {**dict.fromkeys(keys, (1.0, 0.1)), "spearman": (0.5, 0.1)}}
+    stats["m"]["relerr_ratio_m_low"] = (float("nan"), float("nan"))
+    md = stats_markdown(stats)
+    assert "n/a" in md and "nan" not in md
