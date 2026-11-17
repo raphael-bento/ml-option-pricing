@@ -101,6 +101,22 @@ def test_evaluate_and_markdown(setup):
     assert "| 10 |" in md and "constant width" in md and "in-sample" in md
 
 
+def test_markdown_rows_have_consistent_cell_count(setup):
+    ds, model = setup
+    res = evaluate_mc(model, ds.val, n_passes=10, calib=ds.val)
+    lines = mc_table_markdown(res, 10).splitlines()
+    tables, current = [], []
+    for ln in lines + [""]:
+        if ln.startswith("|"):
+            current.append(ln)
+        elif current:
+            tables.append(current)
+            current = []
+    assert len(tables) == 2
+    for rows in tables:
+        assert len({r.count("|") for r in rows}) == 1, rows
+
+
 def test_baseline_uses_calib_split(setup):
     ds, model = setup
     # calib with exact targets -> zero error -> zero half-width

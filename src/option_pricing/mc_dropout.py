@@ -126,7 +126,7 @@ def mc_table_markdown(res: dict[str, float], n_passes: int) -> str:
         )
     in_sample = ", in-sample" if res.get("baseline_in_sample") else ""
     lines.append(
-        f"| constant width (95 % |err| quantile, calibrated on val{in_sample}) "
+        f"| constant width (95 % abs. error quantile, calibrated on val{in_sample}) "
         f"| {res['baseline_coverage']:.3f} "
         f"| {2 * res['baseline_half_width']:.3e} |"
     )
