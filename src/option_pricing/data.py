@@ -43,6 +43,8 @@ def sample_inputs(n: int, rng: np.random.Generator) -> np.ndarray:
 
 def make_split(n: int, rng: np.random.Generator) -> Split:
     """Sample ``n`` points and label them with the exact scaled BS call price ``C / K``."""
+    if n < 1:
+        raise ValueError(f"Split size must be >= 1, got {n}.")
     X = sample_inputs(n, rng)
     y = scaled_call_price(X[:, 0], X[:, 1], X[:, 2], X[:, 3])
     return Split(X=X, y=y)

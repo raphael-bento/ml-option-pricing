@@ -1,6 +1,7 @@
 import numpy as np
+import pytest
 
-from option_pricing.black_scholes import bs_call_price
+from option_pricing.black_scholes import bs_call_price, scaled_call_price
 from option_pricing.data import BOUNDS, FEATURE_NAMES, make_dataset
 
 
@@ -37,7 +38,34 @@ def test_target_is_true_bs_price():
     np.testing.assert_allclose(ds.train.y, bs_call_price(m, 1.0, tau, r, sigma))
 
 
-def test_splits_do_not_overlap():
+def test_splits_share_no_rows():
     ds = make_dataset(100, 100, 100)
-    assert not np.array_equal(ds.train.X, ds.val.X)
-    assert not np.array_equal(ds.val.X, ds.test.X)
+    rows = [set(map(tuple, s.X)) for s in (ds.train, ds.val, ds.test)]
+    assert not rows[0] & rows[1]
+    assert not rows[0] & rows[2]
+    assert not rows[1] & rows[2]
+
+
+def test_sampling_covers_domain():
+    X = make_dataset(5000, 10, 10).train.X
+    for i, name in enumerate(FEATURE_NAMES):
+        lo, hi = BOUNDS[name]
+        width = hi - lo
+        assert X[:, i].min() < lo + 0.02 * width
+        assert X[:, i].max() > hi - 0.02 * width
+        assert abs(X[:, i].mean() - (lo + hi) / 2) < 0.03 * width
+
+
+@pytest.mark.parametrize("n", [0, -5])
+def test_invalid_size_raises(n):
+    with pytest.raises(ValueError):
+        make_dataset(n_train=n)
+
+
+def test_target_reference_value_and_no_arbitrage_bounds():
+    assert scaled_call_price(1.0, 1.0, 0.05, 0.2) == pytest.approx(0.10451, abs=1e-4)
+    ds = make_dataset(1000, 10, 10)
+    m, tau, r, _ = ds.train.X.T
+    lower = np.maximum(m - np.exp(-r * tau), 0.0)
+    assert np.all(ds.train.y >= lower - 1e-12)
+    assert np.all(ds.train.y <= m + 1e-12)
