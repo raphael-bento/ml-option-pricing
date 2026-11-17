@@ -47,13 +47,16 @@ uses; the test split is used only for the final MC-dropout evaluation, never to 
 
 | config | val RMSE | val MAE | val median rel. err | best epoch | final train MSE |
 |---|---|---|---|---|---|
-| SGD lr=1e-4 (original report) | 1.737e-01 | 1.507e-01 | 4.996e-01 | 99 | 3.244e-02 |
-| **Adam lr=1e-3** | **8.141e-03** | **6.209e-03** | **2.847e-02** | 34 | 5.506e-04 |
+| SGD lr=1e-4 (original report) | 1.462e-01 | 1.186e-01 | 4.417e-01 | 99 | 2.491e-02 |
+| **Adam lr=1e-3** | **8.593e-03** | **6.588e-03** | **3.113e-02** | 16 | 3.559e-04 |
+| SGD lr=1e-3 (crossed) | 4.296e-02 | 3.394e-02 | 1.381e-01 | 99 | 6.151e-03 |
+| Adam lr=1e-4 (crossed) | 1.234e-02 | 9.358e-03 | 4.363e-02 | 57 | 8.792e-04 |
 | Baseline (train mean) | 2.180e-01 | 1.884e-01 | 6.133e-01 | - | - |
 
-With the report's SGD configuration the network barely beats the constant baseline within 100
-epochs (best epoch = last epoch: still improving). Adam reduces the RMSE by ~21x, so all the
-following experiments use Adam lr=1e-3.
+With the report's SGD configuration the network under-fits: it ends ~33 % below the constant
+baseline and its best epoch is the last one (still improving). Adam lr=1e-3 reduces the RMSE by
+~17x. The crossed runs show both factors matter: SGD with a 10x larger lr is still 5x worse than
+Adam lr=1e-3, and Adam with the small lr is 1.4x worse. All following experiments use Adam lr=1e-3.
 
 ### 2. Deep ensemble vs single network (validation split, N=5, MLP)
 
