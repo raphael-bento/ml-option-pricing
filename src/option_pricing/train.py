@@ -1,4 +1,8 @@
-"""Reproducible training loop: MSE loss, SGD, best-on-validation checkpointing."""
+"""Reproducible training loop: MSE loss, SGD or Adam, best-on-validation checkpointing.
+
+Inputs are standardised with a scaler fit on the train split only; the statistics live in the
+returned model (buffers), so ``model(raw_X)`` and ``predict`` work on raw features.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +18,23 @@ from torch import nn
 
 from option_pricing.data import Dataset, make_dataset
 from option_pricing.models import MODELS, build_model
+from option_pricing.preprocessing import StandardScaler
+
+OPTIMIZERS = dict(sgd=torch.optim.SGD, adam=torch.optim.Adam)
+
+
+class ScaledModel(nn.Module):
+    """Standardise raw inputs with train-set statistics, then apply ``net``."""
+
+    def __init__(self, net: nn.Module, scaler: StandardScaler) -> None:
+        super().__init__()
+        self.net = net
+        self.register_buffer("mean", torch.as_tensor(scaler.mean_, dtype=torch.float32))
+        self.register_buffer("std", torch.as_tensor(scaler.std_, dtype=torch.float32))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Return predictions of shape (n,) from raw (unscaled) features."""
+        return self.net((x - self.mean) / self.std)
 
 
 @dataclass
@@ -46,17 +67,24 @@ def train(
     lr: float = 1e-4,
     batch_size: int = 64,
     seed: int = 42,
+    optimizer: str = "sgd",
 ) -> TrainResult:
-    """Train a model with SGD on the train split; track the validation loss each epoch.
+    """Train a model with SGD (or Adam if ``optimizer="adam"``) on the train split.
+
+    Inputs are standardised with a scaler fit on the train split. The validation loss is
+    tracked each epoch.
 
     The test split is never touched. The returned model holds the weights of the epoch
     with the lowest validation MSE.
     """
+    if optimizer not in OPTIMIZERS:
+        raise ValueError(f"Unknown optimizer {optimizer!r}; choose from {sorted(OPTIMIZERS)}.")
     set_seed(seed)
-    model = build_model(model_name)
+    scaler = StandardScaler().fit(dataset.train.X)  # fit on train only
+    model = ScaledModel(build_model(model_name), scaler)
     x_tr, y_tr = _tensors(dataset.train)
     x_val, y_val = _tensors(dataset.val)
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    opt = OPTIMIZERS[optimizer](model.parameters(), lr=lr)
     loss_fn = nn.MSELoss()
     generator = torch.Generator().manual_seed(seed)
     result = TrainResult(model=model)
@@ -68,10 +96,10 @@ def train(
         total = 0.0
         for i in range(0, len(perm), batch_size):
             idx = perm[i : i + batch_size]
-            optimizer.zero_grad()
+            opt.zero_grad()
             loss = loss_fn(model(x_tr[idx]), y_tr[idx])
             loss.backward()
-            optimizer.step()
+            opt.step()
             total += loss.item() * len(idx)
         model.eval()
         with torch.no_grad():
@@ -94,12 +122,19 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--batch-size", type=int, default=64)
+    p.add_argument("--optimizer", choices=sorted(OPTIMIZERS), default="sgd")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out-dir", type=Path, default=Path("outputs"))
     args = p.parse_args(argv)
 
     result = train(
-        make_dataset(seed=args.seed), args.model, args.epochs, args.lr, args.batch_size, args.seed
+        make_dataset(seed=args.seed),
+        args.model,
+        args.epochs,
+        args.lr,
+        args.batch_size,
+        args.seed,
+        args.optimizer,
     )
     args.out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(result.model.state_dict(), args.out_dir / f"{args.model}.pt")

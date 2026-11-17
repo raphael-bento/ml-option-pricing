@@ -42,3 +42,14 @@ def test_cli_writes_outputs(tmp_path):
     main(["--model", "mlp", "--epochs", "1", "--out-dir", str(tmp_path)])
     assert (tmp_path / "mlp.pt").exists()
     assert len(json.loads((tmp_path / "mlp_history.json").read_text())["val_loss"]) == 1
+
+
+def test_cli_adam_option(tmp_path):
+    main(["--optimizer", "adam", "--epochs", "1", "--out-dir", str(tmp_path)])
+    assert (tmp_path / "mlp.pt").exists()
+
+
+def test_model_standardises_with_train_statistics(small_ds):
+    r = train(small_ds, epochs=1)
+    assert torch.allclose(r.model.mean, torch.as_tensor(small_ds.train.X.mean(axis=0)).float())
+    assert torch.allclose(r.model.std, torch.as_tensor(small_ds.train.X.std(axis=0)).float())
